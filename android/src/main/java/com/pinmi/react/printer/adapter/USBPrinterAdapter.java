@@ -84,15 +84,29 @@ public class USBPrinterAdapter implements PrinterAdapter {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            Log.d(LOG_TAG, "onReceive: action=" + action);
             if (ACTION_USB_PERMISSION.equals(action)) {
                 synchronized (this) {
-                    UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    Log.d(LOG_TAG, "onReceive: USB_PERMISSION");
+                    UsbDevice usbDevice = null;
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                             usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice.class);
+                             Log.d(LOG_TAG, "onReceive: usb device android 13" + usbDevice);
+                            } else {
+                                 usbDevice = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                            }
+                    if(usbDevice == null){
+                        Log.e(LOG_TAG, "onReceive: usb device is null");
+                        return;
+                    }
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        Log.d(LOG_TAG, "onReceive: permission granted for device " + usbDevice);
                         Log.i(LOG_TAG,
                                 "success to grant permission for device " + usbDevice.getDeviceId() + ", vendor_id: "
                                         + usbDevice.getVendorId() + " product_id: " + usbDevice.getProductId());
                         mUsbDevice = usbDevice;
                     } else {
+                        Log.d(LOG_TAG, "onReceive: permission denied for device " + usbDevice);
                         Toast.makeText(context,
                                 "User refuses to obtain USB device permissions" + usbDevice.getDeviceName(),
                                 Toast.LENGTH_LONG).show();
@@ -126,13 +140,9 @@ public class USBPrinterAdapter implements PrinterAdapter {
             Intent permissionIntent = new Intent(ACTION_USB_PERMISSION);
             permissionIntent.setPackage(mContext.getPackageName());
 
-            // Dynamically set the PendingIntent flag based on the Android version
-            int pendingIntentFlag;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                pendingIntentFlag = PendingIntent.FLAG_IMMUTABLE;
-            } else {
-                pendingIntentFlag = PendingIntent.FLAG_MUTABLE;
-            }
+            int pendingIntentFlag = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    ? PendingIntent.FLAG_MUTABLE
+                    : PendingIntent.FLAG_UPDATE_CURRENT;
 
             this.mPermissionIndent = PendingIntent.getBroadcast(
                     mContext,
@@ -269,6 +279,7 @@ public class USBPrinterAdapter implements PrinterAdapter {
     public void printRawData(String data, Boolean keepConnection, Callback successCallback, Callback errorCallback) {
         final String rawData = data;
         Log.v(LOG_TAG, "start to print raw data " + data);
+        
         boolean isConnected = openConnection();
         if (isConnected) {
             Log.v(LOG_TAG, "Connected to device");
